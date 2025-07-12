@@ -1,0 +1,114 @@
+name: Main Repository CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM
+
+jobs:
+  submodule-update:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Update submodules
+      run: |
+        git submodule update --remote --merge
+        git status
+    
+    - name: Check for changes
+      id: verify-changed-files
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "changed=true" >> $GITHUB_OUTPUT
+        else
+          echo "changed=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Commit and push changes
+      if: steps.verify-changed-files.outputs.changed == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .
+        git commit -m "Update submodules to latest commits"
+        git push
+
+  integration-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Create test environment
+      run: |
+        cp .env.example .env
+        docker-compose -f docker-compose.test.yml up -d
+    
+    - name: Wait for services
+      run: |
+        sleep 30
+        docker-compose -f docker-compose.test.yml ps
+    
+    - name: Run integration tests
+      run: |
+        docker-compose -f docker-compose.test.yml exec -T backend pytest tests/integration/
+    
+    - name: Run E2E tests
+      run: |
+        docker-compose -f docker-compose.test.yml exec -T frontend npm run test:e2e
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        docker-compose -f docker-compose.test.yml down -v
+        docker system prune -f
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  deploy-production:
+    needs: [submodule-update, integration-test, security-scan]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production..."
+        # Add production deployment commands

@@ -1,0 +1,38 @@
+frontend:
+  - '(vue|react|frontend|ui|css|scss|tailwind|component)'
+  - 'src/**'
+  - 'public/**'
+  - 'package.json'
+
+backend:
+  - '(fastapi|python|api|database|postgresql|redis|celery)'
+  - 'app/**'
+  - 'requirements.txt'
+  - 'alembic/**'
+
+infrastructure:
+  - '(docker|kubernetes|k8s|deployment|ci|cd|nginx|server)'
+  - 'Dockerfile'
+  - 'docker-compose'
+  - '.github/workflows'
+
+database:
+  - '(postgresql|postgres|redis|database|migration|alembic|sql)'
+  - 'alembic/**'
+  - '*.sql'
+
+documentation:
+  - '(readme|docs|documentation|guide|tutorial)'
+  - 'README.md'
+  - 'docs/**'
+  - '*.md'
+
+security:
+  - '(security|vulnerability|cve|authentication|authorization|jwt|password)'
+  - 'security'
+  - 'auth'
+
+performance:
+  - '(performance|slow|optimization|speed|memory|cpu)'
+  - 'performance'
+  - 'optimization'

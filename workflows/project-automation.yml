@@ -1,0 +1,116 @@
+name: Project Automation
+
+on:
+  issues:
+    types: [opened, edited, closed, reopened, labeled, unlabeled]
+  pull_request:
+    types: [opened, edited, closed, reopened, ready_for_review, converted_to_draft]
+  issue_comment:
+    types: [created]
+
+jobs:
+  add-to-project:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Add issue to project
+      if: github.event_name == 'issues' && github.event.action == 'opened'
+      uses: actions/add-to-project@v0.4.0
+      with:
+        project-url: https://github.com/orgs/clubion/projects/1
+        github-token: ${{ secrets.PROJECT_TOKEN }}
+    
+    - name: Add PR to project
+      if: github.event_name == 'pull_request' && github.event.action == 'opened'
+      uses: actions/add-to-project@v0.4.0
+      with:
+        project-url: https://github.com/orgs/clubion/projects/1
+        github-token: ${{ secrets.PROJECT_TOKEN }}
+
+  auto-assign:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+    
+    steps:
+    - name: Auto-assign by component
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const issue = context.payload.issue;
+          const labels = issue.labels.map(label => label.name);
+          
+          let assignees = [];
+          
+          if (labels.includes('component: frontend')) {
+            assignees.push('frontend-lead');
+          }
+          
+          if (labels.includes('component: backend')) {
+            assignees.push('backend-lead');
+          }
+          
+          if (labels.includes('component: infrastructure')) {
+            assignees.push('devops-lead');
+          }
+          
+          if (assignees.length > 0) {
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              assignees: assignees
+            });
+          }
+
+  update-project-status:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Update project status
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.PROJECT_TOKEN }}
+        script: |
+          const pr = context.payload.pull_request;
+          
+          // Update project item status based on PR state
+          if (pr.state === 'open' && pr.draft === false) {
+            // Move to "In Review" column
+            console.log('Moving to In Review');
+          } else if (pr.state === 'closed' && pr.merged === true) {
+            // Move to "Done" column
+            console.log('Moving to Done');
+          }
+
+  notify-slack:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'priority: critical')
+    
+    steps:
+    - name: Notify Slack for critical issues
+      uses: 8398a7/action-slack@v3
+      with:
+        status: custom
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        custom_payload: |
+          {
+            "text": ":rotating_light: Critical Issue Created",
+            "attachments": [{
+              "color": "danger",
+              "fields": [{
+                "title": "Issue",
+                "value": "<${{ github.event.issue.html_url }}|${{ github.event.issue.title }}>",
+                "short": false
+              }, {
+                "title": "Repository",
+                "value": "${{ github.repository }}",
+                "short": true
+              }, {
+                "title": "Author",
+                "value": "${{ github.event.issue.user.login }}",
+                "short": true
+              }]
+            }]
+          }
